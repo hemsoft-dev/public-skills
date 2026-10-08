@@ -1,8 +1,8 @@
-# Deployed from: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@104648b0a9f2709c15d2cfb6c9b7d9dc49e171b3
+# Deployed from: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@f07ab8ca3d58a7a5a6bbf88ff1bc8e3a359b6e53
 # To upgrade: re-run deploy-workflow.ps1 at the desired SHA
 # Deployed from HemSoft/set-it-free-loop. The deployment command replaces this
 # source pin with the immutable source SHA.
-# Source: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@104648b0a9f2709c15d2cfb6c9b7d9dc49e171b3
+# Source: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@f07ab8ca3d58a7a5a6bbf88ff1bc8e3a359b6e53
 name: SFL Codex Review Observer
 run-name: >-
   ${{ github.event_name == 'issue_comment' &&
@@ -1427,7 +1427,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
-      group: sfl-codex-review-pull-context-${{ github.repository }}-${{ github.event.pull_request.number }}
+      group: sfl-codex-review-pull-context-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.base.ref == github.event.repository.default_branch || github.event.changes.base.ref.from == github.event.repository.default_branch }}
       cancel-in-progress: true
     permissions:
       actions: read
