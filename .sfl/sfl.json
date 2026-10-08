@@ -1,10 +1,10 @@
 {
-  "version": "2.1.0-rc.21",
+  "version": "2.1.0-rc.22",
   "tier": "reviewer",
   "source": "hemsoft-dev/set-it-free-loop",
-  "deployedAt": "2026-10-08T12:10:41.274193309Z",
+  "deployedAt": "2026-10-08T13:47:52.393486759Z",
   "deployedBy": "HemSoft",
-  "sourceSha": "89425320ace3127a829d86e3b642fe2b31fd979e",
+  "sourceSha": "ef807fc3ac3cb734efa70435a6a3970223680476",
   "components": [
     "sfl-pr-review-auto"
   ],

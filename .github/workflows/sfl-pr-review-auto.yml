@@ -1,8 +1,8 @@
-# Deployed from: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@89425320ace3127a829d86e3b642fe2b31fd979e
+# Deployed from: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@ef807fc3ac3cb734efa70435a6a3970223680476
 # To upgrade: re-run deploy-workflow.ps1 at the desired SHA
 # Deployed from HemSoft/set-it-free-loop. The deployment command replaces this
 # source pin with the immutable source SHA.
-# Source: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@89425320ace3127a829d86e3b642fe2b31fd979e
+# Source: hemsoft-dev/set-it-free-loop/deployment/infrastructure/sfl-pr-review-auto.yml@ef807fc3ac3cb734efa70435a6a3970223680476
 name: SFL Codex Review Observer
 run-name: >-
   ${{ github.event_name == 'issue_comment' &&
@@ -160,6 +160,30 @@ jobs:
               core.info("Pull request context changed before the review request could invalidate the gate");
               return;
             }
+            // BEGIN TESTABLE REQUEST CONTEXT PROVENANCE
+            function reviewContextUnambiguous(checkRuns, pullNumber, currentBase) {
+              // Native artifacts identify a head, but neither their start time nor
+              // originating base. Any previous context on that same head can
+              // therefore produce a late artifact for a different diff.
+              const contexts = checkRuns.filter(check => check.app && check.app.id === 15368 &&
+                ((check.external_id || "").startsWith("sfl-codex-review:pull-context:") ||
+                 (check.external_id || "").startsWith("sfl-codex-review:base-advance:")));
+              const tokens = [...new Set(contexts.map(check => check.external_id))];
+              if (tokens.length !== 1) return false;
+              if (!/^sfl-codex-review:pull-context:at:\d+:\d+$/.test(tokens[0])) return false;
+              // Keep the token compact: it is embedded in terminal check IDs.
+              // Structured check output carries the base/action provenance.
+              return contexts.every(check => {
+                let provenance;
+                try { provenance = JSON.parse((check.output && check.output.text) || ""); }
+                catch { return false; }
+                return provenance && provenance.schema === 1 &&
+                  provenance.pull_number === pullNumber &&
+                  (provenance.action === "opened" || provenance.action === "synchronize") &&
+                  provenance.base_sha === currentBase.toLowerCase();
+              });
+            }
+            // END TESTABLE REQUEST CONTEXT PROVENANCE
             const terminalRequestIdentity = `:request:${commentId}:at:`;
             if (confirmedChecks.some(
               check => check.app && check.app.id === 15368 &&
@@ -176,7 +200,10 @@ jobs:
               core.info("This registered Codex review request already invalidated the prior gate");
               return;
             }
-            const reason = `Registered Codex review request ${commentId} is pending for pull request #${pullNumber}`;
+            const requestContextUsable = reviewContextUnambiguous(confirmedChecks, pullNumber, currentBase);
+            const reason = requestContextUsable
+              ? `Registered Codex review request ${commentId} is pending for pull request #${pullNumber}`
+              : `This pull request head has ambiguous or unsupported review provenance; advance the branch to a new head, then request a Codex review.`;
             await github.rest.checks.create({
               owner,
               repo,
@@ -187,16 +214,18 @@ jobs:
               completed_at: new Date().toISOString(),
               details_url: comment.data.html_url,
               external_id: externalId,
-              output: {title: "SFL Codex review pending", summary: reason},
+              output: {title: requestContextUsable ? "SFL Codex review pending" : "SFL Codex review blocked", summary: reason},
             });
             await github.rest.repos.createCommitStatus({
               owner,
               repo,
               sha: currentHead,
-              state: "pending",
+              state: requestContextUsable ? "pending" : "failure",
               context: "SFL Reviewer Gate Runner",
               target_url: comment.data.html_url,
-              description: "Waiting for the registered Codex review result",
+              description: requestContextUsable
+                ? "Waiting for the registered Codex review result"
+                : "Advance the branch to a new head before requesting review",
             });
             core.setFailed(reason);
 
@@ -285,7 +314,7 @@ jobs:
               }
 
               if (input.eventName === "issue_comment" &&
-                  /^Codex Review: Didn't find any major issues\./.test(body)) {
+                  /^Codex Review: (?:Didn't|Did not) find any major issues\./.test(body)) {
                 return { action: "success", reason: "Codex found no major issues on the current head" };
               }
               if (input.eventName === "pull_request_review" &&
@@ -628,8 +657,11 @@ jobs:
                 if (!previous ||
                     hasTerminalGateBefore(previous, requestContext, candidate.requestTime, checkRuns)) {
                   eligible.push({...candidate, contextToken: requestContext});
-                  previousByContext.set(requestContext, candidate);
                 }
+                // Even an ineligible overlapping request can emit a late artifact.
+                // The next request must follow this immediate predecessor's terminal
+                // gate, rather than skipping it and reusing an older terminal gate.
+                previousByContext.set(requestContext, candidate);
               }
               return eligible;
             };
@@ -1214,6 +1246,12 @@ jobs:
 
             const {owner, repo} = context.repo;
             const pull = context.payload.pull_request;
+            const headRepo = pull.head.repo && pull.head.repo.full_name;
+            if (pull.base.ref !== context.payload.repository.default_branch ||
+                !headRepo || headRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) {
+              core.info("Pull context does not target a supported same-repository default-branch review");
+              return;
+            }
             const workflowRun = await github.rest.actions.getWorkflowRun({
               owner, repo, run_id: context.runId,
             });
@@ -1389,6 +1427,8 @@ jobs:
             });
             const invalidatePull = async pull => {
               if (pull.base.ref !== baseRef) return;
+              const headRepo = pull.head.repo && pull.head.repo.full_name;
+              if (!headRepo || headRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) return;
               const invalidationId = `sfl-codex-review:base-advance:at:${baseAdvanceTime}:${context.runId}:${pull.number}`;
               const reviewerChecks = await github.paginate(
                 github.rest.checks.listForRef,
