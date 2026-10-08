@@ -1,0 +1,15 @@
+{
+  "version": "2.1.0-rc.21",
+  "tier": "reviewer",
+  "source": "hemsoft-dev/set-it-free-loop",
+  "deployedAt": "2026-10-08T12:10:41.274193309Z",
+  "deployedBy": "HemSoft",
+  "sourceSha": "89425320ace3127a829d86e3b642fe2b31fd979e",
+  "components": [
+    "sfl-pr-review-auto"
+  ],
+  "enginePolicy": {
+    "defaultProfile": "codex-gpt-55-high",
+    "workflows": []
+  }
+}
